@@ -14,7 +14,7 @@ port                = int(sys.argv[2])
 msgFromClient       = str(sys.argv[3])
 numPackets          = 1
 bufferSize          = 1024
-serverAddressPort   = (host, 20001)
+serverAddressPort   = (host, port)
 
 # Create a UDP socket at client side
 UDPClientSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
