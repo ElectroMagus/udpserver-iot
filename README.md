@@ -1,5 +1,6 @@
 # udpserver-iot
-Testing UDP for communicating with ESP32, ESP8266.
+##ESP32 and ESP8266 UDP Server Control
 
-## Currently building a small robot and using UDP to control motor function.  Exploring using FreeRTOS Queues, Tasks and Scheduling in order to process commmands and routines.
+Currently building a small robot and using UDP to control motor function.  Exploring using FreeRTOS Queues, Tasks and Scheduling in order to process commmands and routines.  
 
+Testing tools are written in Python for quick prototying/testing.
