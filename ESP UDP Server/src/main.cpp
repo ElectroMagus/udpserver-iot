@@ -17,11 +17,11 @@ QueueHandle_t commandQ;   // Queue for commands to be executed
 TaskHandle_t addCommand;  // Task handler function to add items to the queue
 TaskHandle_t pcommandQ;  // Task handler function to remove items from the queue
 
-// Function that runs when the commandQ task is invoked
+// Function used in the pcommandQ Task to process the commandQ Queue
 void pcommandQfunc(void *pvParameters) {
-  for(;;) {
+  for(;;) {		// Run forever unless killed by task handle
     int commandData;   // variable used to process the next command on the command queue
-    for(int i = 0; i<20; i++){
+    for(int i = 0; i<20; i++){		// Make sure to select a value according to your queue size
       // Print all items currently in the command queue to the serial port
       xQueueReceive(commandQ, &commandData, portMAX_DELAY);
       Serial.print(commandData);
@@ -38,12 +38,6 @@ void setup() {
   ArduinoOTA.setHostname("servo");                // mDNS hostname
   ArduinoOTA.begin();
   
-  // Initialize Servo Board
-  pwm.begin();
-  pwm.setOscillatorFrequency(27000000);
-  pwm.setPWMFreq(SERVO_FREQ);  // Analog servos run at ~50 Hz updates
-  
-
   // FreeRTOS Queue Setup
   commandQ = xQueueCreate( 20, sizeof( int ) );  // args:  # of items, size in byte per item      
   if(commandQ == NULL) {
