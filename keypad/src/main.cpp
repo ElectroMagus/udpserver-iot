@@ -1,14 +1,14 @@
 #include "Arduino.h"
+
 // OTA Update Libraries
 #include <ESP8266Wifi.h>
-//#include <ESPmDNS.h>          
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 const char* ssid = "";
 const char* password = "";
 
 // UDP Libraries
-#include "ESPAsyncUDP.h"
+#include "ESPAsyncUDP.h"           
 AsyncUDP udp;
 
 #include "Adafruit_NeoTrellis.h"
@@ -30,15 +30,35 @@ uint32_t Wheel(byte WheelPos) {
   return 0;
 }
 
+void colorWipe() {
+  // Pretty animation  --  Tweaked from the Adafruit Example
+  uint8 rand = random(9);                                     //  Adds a little starting pattern variation each time the function runs
+  for (uint16_t i=0; i<trellis.pixels.numPixels(); i++) {
+    trellis.pixels.setPixelColor(i, Wheel(map((i + rand), 0, trellis.pixels.numPixels(), 0, 255)));
+    trellis.pixels.show();
+    delay(40);
+  }
+  for (uint16_t i=0; i<trellis.pixels.numPixels(); i++) {
+    trellis.pixels.setPixelColor(i, 0x000000);
+    trellis.pixels.show();
+    delay(40);
+  }
+}
 
 
 // Callback function that lights up all keys when pressed.   Added in UDP code to send a packet on each keypress in the format to speak with the ESP module controlling servos.
 TrellisCallback blink(keyEvent evt){
   if (evt.bit.EDGE == SEESAW_KEYPAD_EDGE_RISING) {                              // Key pressed
     trellis.pixels.setPixelColor(evt.bit.NUM, Wheel(map(evt.bit.NUM, 0, trellis.pixels.numPixels(), 0, 255)));      //  Set color on press
-    if(udp.connect(IPAddress(10,9,8,142), 20001)) { 
-      udp.printf("F%i", evt.bit.NUM);                                           // evt.bit.NUM is the key # pressed in the event
-    }
+    
+    if (evt.bit.NUM < 4) {                                                        // If Num 0-3, send UPD packet with #
+      if(udp.connect(IPAddress(10,9,8,142), 20001)) { 
+        udp.printf("F%i", evt.bit.NUM);                                           
+        } 
+      } else if (evt.bit.NUM == 12) {						// If 12, do a colorWipe()
+        colorWipe();
+      }
+   
   } else if (evt.bit.EDGE == SEESAW_KEYPAD_EDGE_FALLING) {                    // Key released
       trellis.pixels.setPixelColor(evt.bit.NUM, 0);                           // Turn color off on release
   }
@@ -70,17 +90,8 @@ void setup() {
     trellis.registerCallback(i, blink);
   }
 
-  // Turn on pretty animation   ---   Add to function/callback for nice effect.
-  for (uint16_t i=0; i<trellis.pixels.numPixels(); i++) {
-    trellis.pixels.setPixelColor(i, Wheel(map(i, 0, trellis.pixels.numPixels(), 0, 255)));
-    trellis.pixels.show();
-    delay(50);
-  }
-  for (uint16_t i=0; i<trellis.pixels.numPixels(); i++) {
-    trellis.pixels.setPixelColor(i, 0x000000);
-    trellis.pixels.show();
-    delay(50);
-  }
+  // Show Ready 
+  colorWipe();
 }
 
 void loop() {
