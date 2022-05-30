@@ -1,14 +1,14 @@
 #include "Arduino.h"
-
 // OTA Update Libraries
 #include <ESP8266Wifi.h>
+//#include <ESPmDNS.h>          
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 const char* ssid = "";
 const char* password = "";
 
 // UDP Libraries
-#include "ESPAsyncUDP.h"           
+#include "ESPAsyncUDP.h"
 AsyncUDP udp;
 
 #include "Adafruit_NeoTrellis.h"
@@ -51,11 +51,11 @@ TrellisCallback blink(keyEvent evt){
   if (evt.bit.EDGE == SEESAW_KEYPAD_EDGE_RISING) {                              // Key pressed
     trellis.pixels.setPixelColor(evt.bit.NUM, Wheel(map(evt.bit.NUM, 0, trellis.pixels.numPixels(), 0, 255)));      //  Set color on press
     
-    if (evt.bit.NUM < 4) {                                                        // If Num 0-3, send UPD packet with #
+    if (evt.bit.NUM < 5) {                                                        // If Num 0-4, send UPD packet with #
       if(udp.connect(IPAddress(10,9,8,142), 20001)) { 
         udp.printf("F%i", evt.bit.NUM);                                           
         } 
-      } else if (evt.bit.NUM == 12) {						// If 12, do a colorWipe()
+      } else if (evt.bit.NUM == 12) {
         colorWipe();
       }
    
@@ -97,7 +97,11 @@ void setup() {
 void loop() {
   trellis.read();                 // interrupt management handles keypresses
   delay(20);                      //the trellis has a resolution of around 60hz
-
   ArduinoOTA.handle();
+
+
+//    if(udp.connect(IPAddress(10,9,8,114), 20001)) { 
+//        udp.print("D");
+
   
 }
