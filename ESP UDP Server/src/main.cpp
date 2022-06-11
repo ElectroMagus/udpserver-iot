@@ -5,12 +5,51 @@
 #include <ESPmDNS.h>          
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
-const char* ssid = "";
-const char* password = "";
+const char* ssid = "Dist_8224";
+const char* password = "Wacky123!";
 
 // UDP Libraries
 #include "AsyncUDP.h"
 AsyncUDP udp;
+
+// Robot Motors
+int motor1a = 12;
+int motor1b = 27;
+int motor2a = 33;
+int motor2b = 15;
+int speedR = 225;   // Default Speed of Right Wheels 0-255
+int speedL = 225;   // Default Speed of Left Wheels 0-255
+
+
+void reverseRob() {
+  digitalWrite(motor1a, LOW);
+  digitalWrite(motor1b, HIGH);
+  digitalWrite(motor2a, LOW);
+  digitalWrite(motor2b, HIGH);
+}
+
+void forwardRob() {
+  //digitalWrite(motor1a, HIGH);
+  ledcWrite(1, speedR);
+  digitalWrite(motor1b, LOW);
+  //digitalWrite(motor2a, HIGH);
+  ledcWrite(2, speedL);
+  digitalWrite(motor2b, LOW);
+}
+
+void stopRob() {
+  
+  //digitalWrite(motor1a, LOW);
+  ledcWrite(1, 0);
+  digitalWrite(motor1b, LOW);
+  
+  //digitalWrite(motor2a, LOW);
+  ledcWrite(2, 0);
+  digitalWrite(motor2b, LOW);
+ 
+}
+
+
 
 // FreeRTOS Tasks and Queue Declarations
 QueueHandle_t commandQ;   // Queue for commands to be executed
@@ -25,19 +64,52 @@ void pcommandQfunc(void *pvParameters) {
       // Print all items currently in the command queue to the serial port
       xQueueReceive(commandQ, &commandData, portMAX_DELAY);
       Serial.print(commandData);
+      Serial.print("*");
+      if (commandData == 0) { 
+        stopRob();
+      } else if (commandData == 1) {
+        forwardRob();
+      } else if (commandData == 2) {
+        reverseRob();
+      } else if (commandData == 3) {
+        if (speedR <= 250) { speedR = speedR + 5; }
+        if (speedL <= 250) { speedL = speedL + 5; }
+      } else if (commandData == 4) {
+        if (speedR >= 0) { speedR = speedR - 5; }
+        if (speedL >= 0) { speedL = speedL - 5; }
+      } else
+      Serial.print(commandData);
       Serial.print("|");
     }
   }
 }
+
 
 void setup() {
   Serial.begin(115200);
   // OTA Setup
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  ArduinoOTA.setHostname("servo");                // mDNS hostname
+  ArduinoOTA.setHostname("robot");                // mDNS hostname
   ArduinoOTA.begin();
   
+
+  // Motor Setup
+  pinMode(motor1a, OUTPUT);
+  pinMode(motor1b, OUTPUT);
+  pinMode(motor2a, OUTPUT);
+  pinMode(motor2b, OUTPUT);
+  // analogWrite() dosen't work with ESP32, so setting up the ledc PWM channel to send signals to the pins
+  ledcSetup(1, 50000, 8);     // LED Channel 0, 50kHz, 8 bit (0-255) resolution
+  ledcAttachPin(motor1a, 1);
+  //ledcAttachPin(motor1b, 1);
+  ledcSetup(2, 50000, 8);     // LED Channel 1, 50kHz, 8 bit (0-255) resolution 
+  ledcAttachPin(motor2a, 2);  
+  //ledcAttachPin(motor2b, 2);
+  //ledcWrite(1, 128);              // Half Speed on LED Channel 0
+  //ledcWrite(2, 128);              // Half Speed on LED Channel 1
+
+
   // FreeRTOS Queue Setup
   commandQ = xQueueCreate( 20, sizeof( int ) );  // args:  # of items, size in byte per item      
   if(commandQ == NULL) {
@@ -81,6 +153,7 @@ void setup() {
       
     });
   }
+  
 }
 
 
@@ -91,5 +164,8 @@ void loop() {
 
 ArduinoOTA.handle();
 vTaskDelay(1);          //  Removed delay() since we're using tasks and want to let loop() yield
+//forwardRob();
+
+
 
 }
