@@ -1,5 +1,6 @@
 #include <Arduino.h>
 
+
 // OTA Update Libraries
 #include <WiFi.h>
 #include <ESPmDNS.h>          
@@ -12,37 +13,18 @@ const char* password = "";
 #include "AsyncUDP.h"
 AsyncUDP udp;
 
+/*  Pin Defs for Motor Driver
 // Robot Motors
 int motor1a = 12;
 int motor1b = 27;
 int motor2a = 33;
 int motor2b = 15;
-int speedR = 225;   // Default Speed of Right Wheels 0-255
-int speedL = 225;   // Default Speed of Left Wheels 0-255
+*/
 
-
-void reverseRob() {
-  ledcWrite(1, 0);            
-  ledcWrite(2, 0);
-  ledcWrite(3, speedR);     
-  ledcWrite(4, speedR);
-}
-
-void forwardRob() {
-  ledcWrite(1, speedR);
-  ledcWrite(2, speedL);
-  ledcWrite(3, 0);
-  ledcWrite(4, 0);
-}
-
-void stopRob() {
-  ledcWrite(1, 0);
-  ledcWrite(2, 0);
-  ledcWrite(3, 0);
-  ledcWrite(4, 0);
-}
-
-
+#include <MX1508.h>                     // See lib for source code.  Adapted for ESP32 from the AVR library at https://github.com/Saeterncj/MX1508
+// Create motor object for each wheel
+MX1508 motorA(12, 27, 0, 1);       //  Pin1, Pin2, PWMChannel 1, PWMChannel 2
+MX1508 motorB(33, 15, 2, 3);
 
 // FreeRTOS Tasks and Queue Declarations
 QueueHandle_t commandQ;   // Queue for commands to be executed
@@ -59,17 +41,23 @@ void pcommandQfunc(void *pvParameters) {
       Serial.print(commandData);
       Serial.print("*");
       if (commandData == 0) { 
-        stopRob();
+        //stopRob();
+        motorA.stopMotor();
+        motorB.stopMotor();
       } else if (commandData == 1) {
-        forwardRob();
+        //forwardRob();
+        motorA.motorGo(200);
+        motorB.motorGo(200);
       } else if (commandData == 2) {
-        reverseRob();
+        motorA.motorRev(200);
+        motorB.motorRev(200);
+        //reverseRob();
       } else if (commandData == 3) {
-        if (speedR <= 250) { speedR = speedR + 5; }
-        if (speedL <= 250) { speedL = speedL + 5; }
+        //if (speedR <= 250) { speedR = speedR + 5; }
+        //if (speedL <= 250) { speedL = speedL + 5; }
       } else if (commandData == 4) {
-        if (speedR >= 0) { speedR = speedR - 5; }
-        if (speedL >= 0) { speedL = speedL - 5; }
+       // if (speedR >= 0) { speedR = speedR - 5; }
+       // if (speedL >= 0) { speedL = speedL - 5; }
       } else
       Serial.print(commandData);
       Serial.print("|");
@@ -85,27 +73,6 @@ void setup() {
   WiFi.begin(ssid, password);
   ArduinoOTA.setHostname("robot");                // mDNS hostname
   ArduinoOTA.begin();
-  
-
-  // Motor Setup
-  pinMode(motor1a, OUTPUT);
-  pinMode(motor1b, OUTPUT);
-  pinMode(motor2a, OUTPUT);
-  pinMode(motor2b, OUTPUT);
-  // analogWrite() dosen't work with ESP32, so setting up the ledc PWM channel to send signals to the pins
-  // LED Channel 1 (motor1a), 50kHz, 8 bit (0-255) resolution
-  ledcSetup(1, 50000, 8);     
-  ledcAttachPin(motor1a, 1);
-  // LED Channel 2 (motor2a), 50kHz, 8 bit (0-255) resolution 
-  ledcSetup(2, 50000, 8);     
-  ledcAttachPin(motor2a, 2);  
-  // LED Channel 3 (motor1b), 50kHz, 8 bit (0-255) resolution
-  ledcSetup(3, 50000, 8);     
-  ledcAttachPin(motor1b, 3);
-  // LED Channel 4 (motor2b), 50kHz, 8 bit (0-255) resolution 
-  ledcSetup(4, 50000, 8);     
-  ledcAttachPin(motor2b, 4);  
-  
 
   // FreeRTOS Queue Setup
   commandQ = xQueueCreate( 20, sizeof( int ) );  // args:  # of items, size in byte per item      
@@ -123,10 +90,8 @@ void setup() {
       &pcommandQ,  // Task handle. 
       1); // Core where the task should run 
 	  
-	    
 
-
-   // Setup UDP Server to listen
+  // Setup UDP Server to listen
   if(udp.listen(20001)) {
     // When a packet is recieved
     udp.onPacket([](AsyncUDPPacket packet) {
@@ -156,13 +121,7 @@ void setup() {
 
 
 void loop() {
-
-
-
-ArduinoOTA.handle();
+ArduinoOTA.handle();    // TODO:  Move to own task and kill loop from running
 vTaskDelay(1);          //  Removed delay() since we're using tasks and want to let loop() yield
-//forwardRob();
-
-
 
 }
