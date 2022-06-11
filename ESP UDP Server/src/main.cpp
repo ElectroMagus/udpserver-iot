@@ -5,8 +5,8 @@
 #include <ESPmDNS.h>          
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
-const char* ssid = "Dist_8224";
-const char* password = "Wacky123!";
+const char* ssid = "";
+const char* password = "";
 
 // UDP Libraries
 #include "AsyncUDP.h"
