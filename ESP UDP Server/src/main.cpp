@@ -5,8 +5,8 @@
 #include <ESPmDNS.h>          
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
-const char* ssid = "Dist_8224";
-const char* password = "Wacky123!";
+const char* ssid = "";
+const char* password = "";
 
 // UDP Libraries
 #include "AsyncUDP.h"
@@ -22,31 +22,24 @@ int speedL = 225;   // Default Speed of Left Wheels 0-255
 
 
 void reverseRob() {
-  digitalWrite(motor1a, LOW);
-  digitalWrite(motor1b, HIGH);
-  digitalWrite(motor2a, LOW);
-  digitalWrite(motor2b, HIGH);
+  ledcWrite(1, 0);            
+  ledcWrite(2, 0);
+  ledcWrite(3, speedR);     
+  ledcWrite(4, speedR);
 }
 
 void forwardRob() {
-  //digitalWrite(motor1a, HIGH);
   ledcWrite(1, speedR);
-  digitalWrite(motor1b, LOW);
-  //digitalWrite(motor2a, HIGH);
   ledcWrite(2, speedL);
-  digitalWrite(motor2b, LOW);
+  ledcWrite(3, 0);
+  ledcWrite(4, 0);
 }
 
 void stopRob() {
-  
-  //digitalWrite(motor1a, LOW);
   ledcWrite(1, 0);
-  digitalWrite(motor1b, LOW);
-  
-  //digitalWrite(motor2a, LOW);
   ledcWrite(2, 0);
-  digitalWrite(motor2b, LOW);
- 
+  ledcWrite(3, 0);
+  ledcWrite(4, 0);
 }
 
 
@@ -100,15 +93,19 @@ void setup() {
   pinMode(motor2a, OUTPUT);
   pinMode(motor2b, OUTPUT);
   // analogWrite() dosen't work with ESP32, so setting up the ledc PWM channel to send signals to the pins
-  ledcSetup(1, 50000, 8);     // LED Channel 0, 50kHz, 8 bit (0-255) resolution
+  // LED Channel 1 (motor1a), 50kHz, 8 bit (0-255) resolution
+  ledcSetup(1, 50000, 8);     
   ledcAttachPin(motor1a, 1);
-  //ledcAttachPin(motor1b, 1);
-  ledcSetup(2, 50000, 8);     // LED Channel 1, 50kHz, 8 bit (0-255) resolution 
+  // LED Channel 2 (motor2a), 50kHz, 8 bit (0-255) resolution 
+  ledcSetup(2, 50000, 8);     
   ledcAttachPin(motor2a, 2);  
-  //ledcAttachPin(motor2b, 2);
-  //ledcWrite(1, 128);              // Half Speed on LED Channel 0
-  //ledcWrite(2, 128);              // Half Speed on LED Channel 1
-
+  // LED Channel 3 (motor1b), 50kHz, 8 bit (0-255) resolution
+  ledcSetup(3, 50000, 8);     
+  ledcAttachPin(motor1b, 3);
+  // LED Channel 4 (motor2b), 50kHz, 8 bit (0-255) resolution 
+  ledcSetup(4, 50000, 8);     
+  ledcAttachPin(motor2b, 4);  
+  
 
   // FreeRTOS Queue Setup
   commandQ = xQueueCreate( 20, sizeof( int ) );  // args:  # of items, size in byte per item      
