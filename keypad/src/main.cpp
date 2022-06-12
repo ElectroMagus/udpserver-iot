@@ -51,11 +51,12 @@ TrellisCallback blink(keyEvent evt){
   if (evt.bit.EDGE == SEESAW_KEYPAD_EDGE_RISING) {                              // Key pressed
     trellis.pixels.setPixelColor(evt.bit.NUM, Wheel(map(evt.bit.NUM, 0, trellis.pixels.numPixels(), 0, 255)));      //  Set color on press
     
-    if (evt.bit.NUM < 5) {                                                        // If Num 0-4, send UPD packet with #
-      if(udp.connect(IPAddress(10,9,8,142), 20001)) { 
+    if (evt.bit.NUM < 6) {                                                        // If Num 0-5, send UPD packet with #
+      if(udp.connect(IPAddress(10,9,8,160), 20001)) { 
         udp.printf("F%i", evt.bit.NUM);                                           
         } 
       } else if (evt.bit.NUM == 12) {
+        
         colorWipe();
       }
    
@@ -63,6 +64,37 @@ TrellisCallback blink(keyEvent evt){
       trellis.pixels.setPixelColor(evt.bit.NUM, 0);                           // Turn color off on release
   }
   trellis.pixels.show();                                                      // Send neopixel color update
+  return 0;
+}
+
+TrellisCallback remoteF(keyEvent evt){
+  if (evt.bit.EDGE == SEESAW_KEYPAD_EDGE_RISING) {                              // Key pressed
+      trellis.pixels.setPixelColor(evt.bit.NUM, 0);
+      //Button Specific Code
+      if(udp.connect(IPAddress(10,9,8,142), 20001)) { 
+        if (evt.bit.NUM == 14) { 
+          udp.println("F1");                                           
+        } else if (evt.bit.NUM == 10) {
+          udp.println("F0");
+        } else if (evt.bit.NUM == 6) {
+          udp.println("F2");
+        } else if (evt.bit.NUM == 1) {
+          udp.println("F5");
+        }else if (evt.bit.NUM == 0) {
+          udp.println("F6");
+        }
+   
+      } 
+      // End Button Specific Code
+    } else if (evt.bit.EDGE == SEESAW_KEYPAD_EDGE_FALLING) { 
+       if ((evt.bit.NUM == 14) || (evt.bit.NUM == 6) || (evt.bit.NUM == 1)) { 
+        trellis.pixels.setPixelColor(evt.bit.NUM, 0x0000FF);
+       } else {
+         trellis.pixels.setPixelColor(evt.bit.NUM, 0xFF0000);
+       }                       
+    }
+
+  trellis.pixels.show();
   return 0;
 }
 
@@ -90,8 +122,15 @@ void setup() {
     trellis.registerCallback(i, blink);
   }
 
+  trellis.registerCallback(14, remoteF);
+  trellis.registerCallback(10, remoteF);
+  trellis.registerCallback(6, remoteF);
+  trellis.registerCallback(1, remoteF);
+  trellis.registerCallback(0, remoteF);
+
   // Show Ready 
-  colorWipe();
+  //colorWipe();
+  
 }
 
 void loop() {
