@@ -30,8 +30,8 @@ int motor2b = 15;
 // Create motor object for each wheel
 MX1508 motorA(12, 27, 0, 1);       //  Pin1, Pin2, PWMChannel 1, PWMChannel 2   (16 Channels availible 0-16)
 MX1508 motorB(33, 15, 2, 3);
-uint8_t speedL = 220;               // Set default speed
-uint8_t speedR = 220;               // Set default speed
+uint8_t speedL = 210;               // Set default speed
+uint8_t speedR = 210;               // Set default speed
 
 // FreeRTOS Tasks and Queue Declarations
 QueueHandle_t commandQ;   // Queue for commands to be executed
@@ -70,7 +70,13 @@ void pcommandQfunc(void *pvParameters) {
         if (speedR >= 0) { speedR = speedR - 5; }
         if (speedL >= 0) { speedL = speedL - 5; }
       } else if (commandData == 5) {
-        readingDistance = sensor.getRawDistance();        // Testing getting readings from sensor with this library.   This will update the value, then send another packet with an invalid header and the distance will be returned for diagnostics
+        vTaskSuspend(distanceH);                            // Suspend Autonomous mode
+        motorA.stopMotor();
+        motorB.stopMotor();
+        //Serial.println("Auto Mode Suspended");
+      } else if (commandData == 6) {
+        vTaskResume(distanceH);                             // Start Autonomous mode
+        //Serial.println("Auto Mode Started");
       } else
       Serial.print(commandData);
       Serial.print("|");
@@ -78,15 +84,20 @@ void pcommandQfunc(void *pvParameters) {
   }
 }
 
-// Function used for measuring distance and stopping the motor when collision imminent
+// Function used for measuring distance and acting as a basic autonomous mode.   
 void distanceSensorfunc(void *pvParameters) {
   for(;;) {		// Run forever unless killed by task handle
     readingDistance = sensor.getRawDistance();
-    if (readingDistance < 10) {         // Shutdown motors if less than 10mm.   Need to update with better overall logic-  this prevents backing up when something is in front too close
+    if (readingDistance < 15) {         // Shutdown motors if less than 10mm.   Need to update with better overall logic-  this prevents backing up when something is in front too close
       motorA.stopMotor(); 
       motorB.stopMotor();
+      motorA.motorRev(speedR);
+      vTaskDelay(600);
+      motorA.stopMotor();
     }
-    vTaskDelay(100);              // This seems to work for now.
+    vTaskDelay(10);              // This seems to work for now.
+    motorA.motorGo(speedR);
+    motorB.motorGo(speedL);
   }
 }
 
@@ -116,7 +127,7 @@ void setup() {
       &pcommandQ,  // Task handle. 
       1); // Core where the task should run 
   
-  // Distance Sensor Reading Task 
+  // Distance Sensor Reading Task / Autonomous Mode
   xTaskCreatePinnedToCore(
       distanceSensorfunc, // Function to implement the task 
       "distanceSensor", // Name of the task 
@@ -125,7 +136,8 @@ void setup() {
       4,  // Priority of the task                   // Higher than other tasks right now to allow priority for collision detection.
       &distanceH,  // Task handle. 
       1); // Core where the task should run 
-	  
+  vTaskSuspend(distanceH);                         // Suspend task right after creation to allow for remote control by default
+  
 
   // Setup UDP Server to listen
   if(udp.listen(20001)) {
