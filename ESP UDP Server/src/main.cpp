@@ -13,6 +13,11 @@ const char* password = "";
 #include "AsyncUDP.h"
 AsyncUDP udp;
 
+// Sharp IR Sensor Library from https://github.com/NuwanJ/ESP32SharpIR.git
+#include <ESP32SharpIR.h>
+ESP32SharpIR sensor( ESP32SharpIR::GP2Y0A21YK0F, 32);     // Must use pin on ADC1 else will crash when Wifi is used
+uint8_t readingDistance;       
+
 /*  Pin Defs for Motor Driver
 // Robot Motors
 int motor1a = 12;
@@ -23,13 +28,18 @@ int motor2b = 15;
 
 #include <MX1508.h>                     // See lib for source code.  Adapted for ESP32 from the AVR library at https://github.com/Saeterncj/MX1508
 // Create motor object for each wheel
-MX1508 motorA(12, 27, 0, 1);       //  Pin1, Pin2, PWMChannel 1, PWMChannel 2
+MX1508 motorA(12, 27, 0, 1);       //  Pin1, Pin2, PWMChannel 1, PWMChannel 2   (16 Channels availible 0-16)
 MX1508 motorB(33, 15, 2, 3);
+uint8_t speedL = 220;               // Set default speed
+uint8_t speedR = 220;               // Set default speed
 
 // FreeRTOS Tasks and Queue Declarations
 QueueHandle_t commandQ;   // Queue for commands to be executed
-TaskHandle_t addCommand;  // Task handler function to add items to the queue
+//TaskHandle_t addCommand;  // Task handler function to add items to the queue
 TaskHandle_t pcommandQ;  // Task handler function to remove items from the queue
+TaskHandle_t distanceH; // Task handler for distance sensor readings
+
+
 
 // Function used in the pcommandQ Task to process the commandQ Queue
 void pcommandQfunc(void *pvParameters) {
@@ -46,18 +56,21 @@ void pcommandQfunc(void *pvParameters) {
         motorB.stopMotor();
       } else if (commandData == 1) {
         //forwardRob();
-        motorA.motorGo(200);
-        motorB.motorGo(200);
+        motorA.motorGo(speedR);
+        motorB.motorGo(speedL);
       } else if (commandData == 2) {
-        motorA.motorRev(200);
-        motorB.motorRev(200);
+        motorA.motorRev(speedR);
+        motorB.motorRev(speedL);
         //reverseRob();
       } else if (commandData == 3) {
-        //if (speedR <= 250) { speedR = speedR + 5; }
-        //if (speedL <= 250) { speedL = speedL + 5; }
+        if (speedR <= 250) { speedR = speedR + 5; }
+        if (speedL <= 250) { speedL = speedL + 5; }
+        
       } else if (commandData == 4) {
-       // if (speedR >= 0) { speedR = speedR - 5; }
-       // if (speedL >= 0) { speedL = speedL - 5; }
+        if (speedR >= 0) { speedR = speedR - 5; }
+        if (speedL >= 0) { speedL = speedL - 5; }
+      } else if (commandData == 5) {
+        readingDistance = sensor.getRawDistance();        // Testing getting readings from sensor with this library.   This will update the value, then send another packet with an invalid header and the distance will be returned for diagnostics
       } else
       Serial.print(commandData);
       Serial.print("|");
@@ -65,6 +78,17 @@ void pcommandQfunc(void *pvParameters) {
   }
 }
 
+// Function used for measuring distance and stopping the motor when collision imminent
+void distanceSensorfunc(void *pvParameters) {
+  for(;;) {		// Run forever unless killed by task handle
+    readingDistance = sensor.getRawDistance();
+    if (readingDistance < 10) {         // Shutdown motors if less than 10mm.   Need to update with better overall logic-  this prevents backing up when something is in front too close
+      motorA.stopMotor(); 
+      motorB.stopMotor();
+    }
+    vTaskDelay(100);              // This seems to work for now.
+  }
+}
 
 void setup() {
   Serial.begin(115200);
@@ -80,7 +104,9 @@ void setup() {
     Serial.println("Error creating the queue");
     }
 
-  // Create tasks to process commandQ  
+  //// Create tasks for operational logic  
+  
+  // Motor Command Task 
   xTaskCreatePinnedToCore(
       pcommandQfunc, // Function to implement the task 
       "pcommandQ", // Name of the task 
@@ -88,6 +114,16 @@ void setup() {
       NULL,  // Task input parameter 
       2,  // Priority of the task                   // Don't run at 0 and loop() run's at 1.
       &pcommandQ,  // Task handle. 
+      1); // Core where the task should run 
+  
+  // Distance Sensor Reading Task 
+  xTaskCreatePinnedToCore(
+      distanceSensorfunc, // Function to implement the task 
+      "distanceSensor", // Name of the task 
+      10000,  // Stack size in words 
+      NULL,  // Task input parameter 
+      4,  // Priority of the task                   // Higher than other tasks right now to allow priority for collision detection.
+      &distanceH,  // Task handle. 
       1); // Core where the task should run 
 	  
 
@@ -111,7 +147,8 @@ void setup() {
       } else
 
       // All other packets, just return the header to the client for diagnostics
-      packet.printf("Header Recieved: %c", header[0]);
+      //packet.printf("Header Recieved: %c", header[0]);
+      packet.println(readingDistance);                      // Send any invalid header and the current distance reading is returned
       
     });
   }
