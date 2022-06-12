@@ -14,7 +14,7 @@ AsyncUDP udp;
 #include "Adafruit_NeoTrellis.h"
 #include "SPI.h"
 Adafruit_NeoTrellis trellis;
-
+//// Included Trellis functions from Adafruit for easy use
 // Input a value 0 to 255 to get a color value.
 // The colors are a transition r - g - b - back to r.
 uint32_t Wheel(byte WheelPos) {
@@ -29,7 +29,6 @@ uint32_t Wheel(byte WheelPos) {
   }
   return 0;
 }
-
 void colorWipe() {
   // Pretty animation  --  Tweaked from the Adafruit Example
   uint8 rand = random(9);                                     //  Adds a little starting pattern variation each time the function runs
@@ -44,33 +43,24 @@ void colorWipe() {
     delay(40);
   }
 }
-
-
 // Callback function that lights up all keys when pressed.   Added in UDP code to send a packet on each keypress in the format to speak with the ESP module controlling servos.
 TrellisCallback blink(keyEvent evt){
   if (evt.bit.EDGE == SEESAW_KEYPAD_EDGE_RISING) {                              // Key pressed
     trellis.pixels.setPixelColor(evt.bit.NUM, Wheel(map(evt.bit.NUM, 0, trellis.pixels.numPixels(), 0, 255)));      //  Set color on press
-    
-    if (evt.bit.NUM < 6) {                                                        // If Num 0-5, send UPD packet with #
-      if(udp.connect(IPAddress(10,9,8,160), 20001)) { 
-        udp.printf("F%i", evt.bit.NUM);                                           
-        } 
-      } else if (evt.bit.NUM == 12) {
-        
-        colorWipe();
-      }
-   
   } else if (evt.bit.EDGE == SEESAW_KEYPAD_EDGE_FALLING) {                    // Key released
       trellis.pixels.setPixelColor(evt.bit.NUM, 0);                           // Turn color off on release
   }
   trellis.pixels.show();                                                      // Send neopixel color update
   return 0;
 }
+///// End included Adafruit functions
 
+
+//  Callback for the keys selected for remote control functions
 TrellisCallback remoteF(keyEvent evt){
   if (evt.bit.EDGE == SEESAW_KEYPAD_EDGE_RISING) {                              // Key pressed
-      trellis.pixels.setPixelColor(evt.bit.NUM, 0);
-      //Button Specific Code
+      trellis.pixels.setPixelColor(evt.bit.NUM, 0);                             // Turn off light on keypress
+      // Send UDP Packet Based on Button Press
       if(udp.connect(IPAddress(10,9,8,142), 20001)) { 
         if (evt.bit.NUM == 14) { 
           udp.println("F1");                                           
@@ -83,15 +73,18 @@ TrellisCallback remoteF(keyEvent evt){
         }else if (evt.bit.NUM == 0) {
           udp.println("F6");
         }
-   
+        // Anything here runs on any keypress from remote control buttons
+        //
       } 
-      // End Button Specific Code
-    } else if (evt.bit.EDGE == SEESAW_KEYPAD_EDGE_FALLING) { 
-       if ((evt.bit.NUM == 14) || (evt.bit.NUM == 6) || (evt.bit.NUM == 1)) { 
-        trellis.pixels.setPixelColor(evt.bit.NUM, 0x0000FF);
-       } else {
-         trellis.pixels.setPixelColor(evt.bit.NUM, 0xFF0000);
-       }                       
+      // End Network Code
+    } else if (evt.bit.EDGE == SEESAW_KEYPAD_EDGE_FALLING) {                        // On button release
+       if ((evt.bit.NUM == 14) || (evt.bit.NUM == 6) || (evt.bit.NUM == 0)) {       // These buttons should be blue
+        trellis.pixels.setPixelColor(evt.bit.NUM, 0x0000FF);                      
+       } else {                                                                     // Others are red
+         trellis.pixels.setPixelColor(evt.bit.NUM, 0xFF0000);             
+       }       
+       // Anything here runs on key release from remote control buttons
+       //                
     }
 
   trellis.pixels.show();
@@ -122,14 +115,18 @@ void setup() {
     trellis.registerCallback(i, blink);
   }
 
+  // Setup Buttons used for Remote Control Functions.   remoteF() is called on press/release
   trellis.registerCallback(14, remoteF);
+  trellis.pixels.setPixelColor(14, 0x0000FF);     // Blue - Go
   trellis.registerCallback(10, remoteF);
+  trellis.pixels.setPixelColor(10, 0xFF0000);     // Red - Stop
   trellis.registerCallback(6, remoteF);
+  trellis.pixels.setPixelColor(6, 0x0000FF);
   trellis.registerCallback(1, remoteF);
+  trellis.pixels.setPixelColor(1, 0xFF0000);
   trellis.registerCallback(0, remoteF);
+  trellis.pixels.setPixelColor(0, 0x0000FF);
 
-  // Show Ready 
-  //colorWipe();
   
 }
 
@@ -137,10 +134,5 @@ void loop() {
   trellis.read();                 // interrupt management handles keypresses
   delay(20);                      //the trellis has a resolution of around 60hz
   ArduinoOTA.handle();
-
-
-//    if(udp.connect(IPAddress(10,9,8,114), 20001)) { 
-//        udp.print("D");
-
   
 }
