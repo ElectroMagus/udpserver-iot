@@ -18,16 +18,9 @@ AsyncUDP udp;
 ESP32SharpIR sensor( ESP32SharpIR::GP2Y0A21YK0F, 32);     // Must use pin on ADC1 else will crash when Wifi is used
 uint8_t readingDistance;       
 
-/*  Pin Defs for Motor Driver
-// Robot Motors
-int motor1a = 12;
-int motor1b = 27;
-int motor2a = 33;
-int motor2b = 15;
-*/
-
-#include <MX1508.h>                     // See lib for source code.  Adapted for ESP32 from the AVR library at https://github.com/Saeterncj/MX1508
-// Create motor object for each wheel
+// See lib for source code.  Adapted for ESP32 from the AVR library at https://github.com/Saeterncj/MX1508
+#include <MX1508.h>                     
+// Create motor object for each wheel  (Motor 1-  12,27   Motor 2- 33,15)
 MX1508 motorA(12, 27, 0, 1);       //  Pin1, Pin2, PWMChannel 1, PWMChannel 2   (16 Channels availible 0-16)
 MX1508 motorB(33, 15, 2, 3);
 uint8_t speedL = 210;               // Set default speed
@@ -63,12 +56,13 @@ void pcommandQfunc(void *pvParameters) {
         motorB.motorRev(speedL);
         //reverseRob();
       } else if (commandData == 3) {
-        if (speedR <= 250) { speedR = speedR + 5; }
-        if (speedL <= 250) { speedL = speedL + 5; }
-        
+        motorA.motorRev(speedR);
+        motorB.motorGo(speedL);
+        //turnRight();
       } else if (commandData == 4) {
-        if (speedR >= 0) { speedR = speedR - 5; }
-        if (speedL >= 0) { speedL = speedL - 5; }
+        motorA.motorGo(speedR);
+        motorB.motorRev(speedL);
+        //turnLeft();
       } else if (commandData == 5) {
         vTaskSuspend(distanceH);                            // Suspend Autonomous mode
         motorA.stopMotor();
@@ -77,6 +71,15 @@ void pcommandQfunc(void *pvParameters) {
       } else if (commandData == 6) {
         vTaskResume(distanceH);                             // Start Autonomous mode
         //Serial.println("Auto Mode Started");
+      } else if (commandData == 7) {
+        //faster();
+        speedR = 250;
+        speedL = 250;
+      } else if (commandData == 8) {
+        //slower();
+        speedR = 190;
+        speedL = 190;
+      
       } else
       Serial.print(commandData);
       Serial.print("|");
@@ -88,14 +91,16 @@ void pcommandQfunc(void *pvParameters) {
 void distanceSensorfunc(void *pvParameters) {
   for(;;) {		// Run forever unless killed by task handle
     readingDistance = sensor.getRawDistance();
-    if (readingDistance < 15) {         // Shutdown motors if less than 10mm.   Need to update with better overall logic-  this prevents backing up when something is in front too close
+    if ((readingDistance <= 20) && (readingDistance >= 0 )) {         // Shutdown motors if less than 20mm.   Need to update with better overall logic-  this prevents backing up when something is in front too close
       motorA.stopMotor(); 
       motorB.stopMotor();
       motorA.motorRev(speedR);
+      motorB.motorGo(speedL);
       vTaskDelay(600);
       motorA.stopMotor();
+      motorB.stopMotor();
     }
-    vTaskDelay(10);              // This seems to work for now.
+    vTaskDelay(200);              // This seems to work for now.  Too fast might be affecting stability/kernel panic.  Check freq on PWM channel next.
     motorA.motorGo(speedR);
     motorB.motorGo(speedL);
   }

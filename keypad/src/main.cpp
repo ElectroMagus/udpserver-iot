@@ -59,7 +59,7 @@ TrellisCallback blink(keyEvent evt){
 //  Callback for the keys selected for remote control functions
 TrellisCallback remoteF(keyEvent evt){
   if (evt.bit.EDGE == SEESAW_KEYPAD_EDGE_RISING) {                              // Key pressed
-      trellis.pixels.setPixelColor(evt.bit.NUM, 0);                             // Turn off light on keypress
+      //trellis.pixels.setPixelColor(evt.bit.NUM, 0);                             // Turn off light on keypress
       // Send UDP Packet Based on Button Press
       if(udp.connect(IPAddress(10,9,8,142), 20001)) { 
         if (evt.bit.NUM == 14) { 
@@ -68,26 +68,42 @@ TrellisCallback remoteF(keyEvent evt){
           udp.println("F0");
         } else if (evt.bit.NUM == 6) {
           udp.println("F2");
+        } else if (evt.bit.NUM == 11) {
+          udp.println("F3");
+        } else if (evt.bit.NUM == 9) {
+          udp.println("F4");
         } else if (evt.bit.NUM == 1) {
           udp.println("F5");
         }else if (evt.bit.NUM == 0) {
           udp.println("F6");
+        } else if (evt.bit.NUM == 12) {
+          udp.println("F7");
+        } else if (evt.bit.NUM == 8) {
+          udp.println("F8");
         }
         // Anything here runs on any keypress from remote control buttons
         //
       } 
       // End Network Code
     } else if (evt.bit.EDGE == SEESAW_KEYPAD_EDGE_FALLING) {                        // On button release
-       if ((evt.bit.NUM == 14) || (evt.bit.NUM == 6) || (evt.bit.NUM == 0)) {       // These buttons should be blue
-        trellis.pixels.setPixelColor(evt.bit.NUM, 0x0000FF);                      
+       if ((evt.bit.NUM == 9) || (evt.bit.NUM == 11) || (evt.bit.NUM == 14) || (evt.bit.NUM == 6) || (evt.bit.NUM == 0)) {       // These buttons should be blue
+       // trellis.pixels.setPixelColor(evt.bit.NUM, 0x0000FF);                      
        } else {                                                                     // Others are red
-         trellis.pixels.setPixelColor(evt.bit.NUM, 0xFF0000);             
+        // trellis.pixels.setPixelColor(evt.bit.NUM, 0xFF0000);             
        }       
-       // Anything here runs on key release from remote control buttons
-       //                
+       // Testing sending stop signal on key release
+       if (evt.bit.NUM == 14) { 
+          udp.println("F0"); 
+        } else if (evt.bit.NUM == 11) {
+          udp.println("F0");
+        } else if (evt.bit.NUM == 9) {
+          udp.println("F0"); 
+        } else if (evt.bit.NUM == 6) {
+          udp.println("F0");
+        }            
     }
 
-  trellis.pixels.show();
+  //trellis.pixels.show();
   return 0;
 }
 
@@ -117,9 +133,17 @@ void setup() {
 
   // Setup Buttons used for Remote Control Functions.   remoteF() is called on press/release
   trellis.registerCallback(14, remoteF);
-  trellis.pixels.setPixelColor(14, 0x0000FF);     // Blue - Go
+  trellis.pixels.setPixelColor(14, 0x0000FF);     // 0x0000FF Blue - Go
+  trellis.registerCallback(12, remoteF);
+  trellis.pixels.setPixelColor(12, 0x00FF00);     // Green #00FF00 - Faster
+  trellis.registerCallback(11, remoteF);
+  trellis.pixels.setPixelColor(11, 0x0000FF);     
   trellis.registerCallback(10, remoteF);
-  trellis.pixels.setPixelColor(10, 0xFF0000);     // Red - Stop
+  trellis.pixels.setPixelColor(10, 0xFF0000);     // Red 0xFF0000 - Stop
+  trellis.registerCallback(8, remoteF);
+  trellis.pixels.setPixelColor(8, 0xFFFF00);     // Yellow 0xFFFF00 - Faster
+  trellis.registerCallback(9, remoteF);
+  trellis.pixels.setPixelColor(9, 0x0000FF);     
   trellis.registerCallback(6, remoteF);
   trellis.pixels.setPixelColor(6, 0x0000FF);
   trellis.registerCallback(1, remoteF);
@@ -127,6 +151,7 @@ void setup() {
   trellis.registerCallback(0, remoteF);
   trellis.pixels.setPixelColor(0, 0x0000FF);
 
+  trellis.pixels.show();
   
 }
 
@@ -134,5 +159,4 @@ void loop() {
   trellis.read();                 // interrupt management handles keypresses
   delay(20);                      //the trellis has a resolution of around 60hz
   ArduinoOTA.handle();
-  
 }
