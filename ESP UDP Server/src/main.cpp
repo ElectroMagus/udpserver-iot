@@ -70,15 +70,17 @@ void pcommandQfunc(void *pvParameters) {
         //Serial.println("Auto Mode Suspended");
       } else if (commandData == 6) {
         vTaskResume(distanceH);                             // Start Autonomous mode
+        motorA.motorGo(speedR);                             // Auto mode hangs after restarting when suspended during moving forward.  This fixes that, as the collision detection will stop immediately if too close when resuming.
+        motorB.motorGo(speedL);
         //Serial.println("Auto Mode Started");
       } else if (commandData == 7) {
         //faster();
-        speedR = 250;
-        speedL = 250;
+        speedR = 240;
+        speedL = 240;
       } else if (commandData == 8) {
         //slower();
-        speedR = 190;
-        speedL = 190;
+        speedR = 200;
+        speedL = 200;
       
       } else
       Serial.print(commandData);
