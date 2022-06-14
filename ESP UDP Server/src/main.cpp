@@ -13,36 +13,40 @@ const char* password = "";
 #include "AsyncUDP.h"
 AsyncUDP udp;
 
+// Servo Library
+#include <ESP32Servo.h>
+Servo myservo;
+int servoPin = 21;
+
+
 // Sharp IR Sensor Library from https://github.com/NuwanJ/ESP32SharpIR.git
 #include <ESP32SharpIR.h>
 ESP32SharpIR sensor( ESP32SharpIR::GP2Y0A21YK0F, 32);     // Must use pin on ADC1 else will crash when Wifi is used
 uint8_t readingDistance;       
 
-// See lib for source code.  Adapted for ESP32 from the AVR library at https://github.com/Saeterncj/MX1508
-#include <MX1508.h>                     
+// MX1508 Library from:  https://github.com/ElectroMagus/ESP32MX1508.git
+#include <ESP32MX1508.h>                     
 // Create motor object for each wheel  (Motor 1-  12,27   Motor 2- 33,15)
-MX1508 motorA(12, 27, 0, 1);       //  Pin1, Pin2, PWMChannel 1, PWMChannel 2   (16 Channels availible 0-16)
-MX1508 motorB(33, 15, 2, 3);
+MX1508 motorA(12, 27, 11, 12);       //  Pin1, Pin2, PWMChannel 1, PWMChannel 2   (16 Channels availible 0-15)
+MX1508 motorB(33, 15, 13, 14);
 uint8_t speedL = 210;               // Set default speed
 uint8_t speedR = 210;               // Set default speed
 
-// FreeRTOS Tasks and Queue Declarations
-QueueHandle_t commandQ;   // Queue for commands to be executed
-//TaskHandle_t addCommand;  // Task handler function to add items to the queue
-TaskHandle_t pcommandQ;  // Task handler function to remove items from the queue
-TaskHandle_t distanceH; // Task handler for distance sensor readings
+// FreeRTOS Task and Queue Handle Declarations
+QueueHandle_t CommQ;   // Queue for commands
+TaskHandle_t procCommQ;  // Handler for task to process commands
+TaskHandle_t distanceH; // Handler for distance sensor readings
 
 
 
-// Function used in the pcommandQ Task to process the commandQ Queue
-void pcommandQfunc(void *pvParameters) {
+// Function used in the procCommQ Task to process the CommQ Queue
+void procCommQfunc(void *pvParameters) {
   for(;;) {		// Run forever unless killed by task handle
     int commandData;   // variable used to process the next command on the command queue
     for(int i = 0; i<20; i++){		// Make sure to select a value according to your queue size
       // Print all items currently in the command queue to the serial port
-      xQueueReceive(commandQ, &commandData, portMAX_DELAY);
-      Serial.print(commandData);
-      Serial.print("*");
+      xQueueReceive(CommQ, &commandData, portMAX_DELAY);
+      //Serial.print(commandData);
       if (commandData == 0) { 
         //stopRob();
         motorA.stopMotor();
@@ -52,39 +56,42 @@ void pcommandQfunc(void *pvParameters) {
         motorA.motorGo(speedR);
         motorB.motorGo(speedL);
       } else if (commandData == 2) {
+        //reverseRob();
         motorA.motorRev(speedR);
         motorB.motorRev(speedL);
-        //reverseRob();
       } else if (commandData == 3) {
+        //turnRight();
         motorA.motorRev(speedR);
         motorB.motorGo(speedL);
-        //turnRight();
       } else if (commandData == 4) {
+        //turnLeft();
         motorA.motorGo(speedR);
         motorB.motorRev(speedL);
-        //turnLeft();
       } else if (commandData == 5) {
-        vTaskSuspend(distanceH);                            // Suspend Autonomous mode
+        vTaskSuspend(distanceH);
+        // Suspend Autonomous mode  -- Stop motor function when suspending this task                          
         motorA.stopMotor();
         motorB.stopMotor();
-        //Serial.println("Auto Mode Suspended");
       } else if (commandData == 6) {
-        vTaskResume(distanceH);                             // Start Autonomous mode
-        motorA.motorGo(speedR);                             // Auto mode hangs after restarting when suspended during moving forward.  This fixes that, as the collision detection will stop immediately if too close when resuming.
-        motorB.motorGo(speedL);
-        //Serial.println("Auto Mode Started");
+        // Start Autonomous mode  -- Start motor function when suspending this task or motors will not restart until distance sensor is triggered                         
+        vTaskResume(distanceH);   
+        motorA.motorGo(speedR);                             
+        motorB.motorGo(speedL); 
       } else if (commandData == 7) {
-        //faster();
+        //faster();                     //  Todo:  Use map() function to define stepped speed control that is configurable per motor
         speedR = 240;
         speedL = 240;
       } else if (commandData == 8) {
         //slower();
         speedR = 200;
-        speedL = 200;
-      
+        speedL = 200;            
+      } else if (commandData == 9) {
+        //servo test
+        myservo.write(180);
+        
       } else
-      Serial.print(commandData);
-      Serial.print("|");
+      // This section runs regardless of the commandData sent
+      Serial.print(commandData);      
     }
   }
 }
@@ -116,24 +123,37 @@ void setup() {
   ArduinoOTA.setHostname("robot");                // mDNS hostname
   ArduinoOTA.begin();
 
+  // Servo Setup
+  ESP32PWM::allocateTimer(0);
+	ESP32PWM::allocateTimer(1);
+	ESP32PWM::allocateTimer(2);
+	ESP32PWM::allocateTimer(3);
+	myservo.setPeriodHertz(50);    // standard 50 hz servo
+	myservo.attach(servoPin, 1000, 2000); 
+
   // FreeRTOS Queue Setup
-  commandQ = xQueueCreate( 20, sizeof( int ) );  // args:  # of items, size in byte per item      
-  if(commandQ == NULL) {
+  CommQ = xQueueCreate( 20, sizeof( int ) );  // args:  # of items, size in byte per item      
+  if(CommQ == NULL) {
     Serial.println("Error creating the queue");
     }
 
   //// Create tasks for operational logic  
-  
   // Motor Command Task 
   xTaskCreatePinnedToCore(
-      pcommandQfunc, // Function to implement the task 
-      "pcommandQ", // Name of the task 
+      procCommQfunc, // Function to implement the task 
+      "procCommQ", // Name of the task 
       10000,  // Stack size in words 
       NULL,  // Task input parameter 
       2,  // Priority of the task                   // Don't run at 0 and loop() run's at 1.
-      &pcommandQ,  // Task handle. 
+      &procCommQ,  // Task handle. 
       1); // Core where the task should run 
   
+  // To-do:    - Add command to pause procCommQ to allow sequence of actions to be buffered then launched on command.
+  //              - Add command for pause(ms)  to add to queue
+  //              - Add command to return distance reading
+  
+
+
   // Distance Sensor Reading Task / Autonomous Mode
   xTaskCreatePinnedToCore(
       distanceSensorfunc, // Function to implement the task 
@@ -145,6 +165,8 @@ void setup() {
       1); // Core where the task should run 
   vTaskSuspend(distanceH);                         // Suspend task right after creation to allow for remote control by default
   
+
+  // To-Do:  Move UDP Server to Task
 
   // Setup UDP Server to listen
   if(udp.listen(20001)) {
@@ -161,7 +183,7 @@ void setup() {
       // Using a leading F as a header for testing       
       if (header[0] == 'F') {
         int select = header[1] - '0';     // Converts the string to an integer during declaration to make the compiler happy
-        xQueueSend(commandQ, &select, portMAX_DELAY);   // Add's the int after the F header to the FreeRTOS Command Queue for processing/scheduling to free up the UDP connection 
+        xQueueSend(CommQ, &select, portMAX_DELAY);   // Add's the int after the F header to the FreeRTOS Command Queue for processing/scheduling to free up the UDP connection 
         packet.printf("OK - %i", select);
       } else
 
@@ -177,7 +199,7 @@ void setup() {
 
 
 void loop() {
-ArduinoOTA.handle();    // TODO:  Move to own task and kill loop from running
+ArduinoOTA.handle();    // To-Do:  Move to own task and kill loop from running
 vTaskDelay(1);          //  Removed delay() since we're using tasks and want to let loop() yield
 
 }
