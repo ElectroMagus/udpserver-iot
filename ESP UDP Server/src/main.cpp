@@ -13,31 +13,26 @@ const char* password = "";
 #include "AsyncUDP.h"
 AsyncUDP udp;
 
-// Servo Library
-#include <ESP32Servo.h>
-Servo myservo;
-int servoPin = 21;
-
-
-// Sharp IR Sensor Library from https://github.com/NuwanJ/ESP32SharpIR.git
-#include <ESP32SharpIR.h>
-ESP32SharpIR sensor( ESP32SharpIR::GP2Y0A21YK0F, 32);     // Must use pin on ADC1 else will crash when Wifi is used
-uint8_t readingDistance;       
 
 // MX1508 Library from:  https://github.com/ElectroMagus/ESP32MX1508.git
 #include <ESP32MX1508.h>                     
 // Create motor object for each wheel  (Motor 1-  12,27   Motor 2- 33,15)
-MX1508 motorA(12, 27, 11, 12);       //  Pin1, Pin2, PWMChannel 1, PWMChannel 2   (16 Channels availible 0-15)
-MX1508 motorB(33, 15, 13, 14);
-uint8_t speedL = 210;               // Set default speed
-uint8_t speedR = 210;               // Set default speed
+MX1508 motorA(12, 27, 11, 12, 16, 5000);       //  Pin1, Pin2, PWMChannel 1, PWMChannel 2   (16 Channels availible 0-15), resolution (8,12,16), frequency Hz
+MX1508 motorB(15, 33, 13, 14, 16, 5000);
+uint16_t speedL = 52000;               // Set default speed
+uint16_t speedR = 53000;               // Set default speed
 
 // FreeRTOS Task and Queue Handle Declarations
 QueueHandle_t CommQ;   // Queue for commands
 TaskHandle_t procCommQ;  // Handler for task to process commands
 TaskHandle_t distanceH; // Handler for distance sensor readings
 
-
+// Function used for measuring distance and acting as a basic autonomous mode.   
+void distanceSensorfunc(void *pvParameters) {
+  for(;;) {		// Run forever unless killed by task handle
+          // Placeholder
+     }
+}
 
 // Function used in the procCommQ Task to process the CommQ Queue
 void procCommQfunc(void *pvParameters) {
@@ -68,15 +63,13 @@ void procCommQfunc(void *pvParameters) {
         motorA.motorGo(speedR);
         motorB.motorRev(speedL);
       } else if (commandData == 5) {
-        vTaskSuspend(distanceH);
-        // Suspend Autonomous mode  -- Stop motor function when suspending this task                          
+        vTaskDelete(distanceH);
+        // Suspend Autonomous mode  -- Deletes task.   Suspending caused wierd issues on resuming.                         
         motorA.stopMotor();
         motorB.stopMotor();
       } else if (commandData == 6) {
-        // Start Autonomous mode  -- Start motor function when suspending this task or motors will not restart until distance sensor is triggered                         
-        vTaskResume(distanceH);   
-        motorA.motorGo(speedR);                             
-        motorB.motorGo(speedL); 
+        // Start Autonomous mode  -- Creates task.  
+        xTaskCreatePinnedToCore(distanceSensorfunc, "distanceSensor", 13000, NULL, 2, &distanceH, 1);      
       } else if (commandData == 7) {
         //faster();                     //  Todo:  Use map() function to define stepped speed control that is configurable per motor
         speedR = 240;
@@ -84,10 +77,10 @@ void procCommQfunc(void *pvParameters) {
       } else if (commandData == 8) {
         //slower();
         speedR = 200;
-        speedL = 200;            
+        speedL = 200;     
       } else if (commandData == 9) {
         //servo test
-        myservo.write(180);
+        
         
       } else
       // This section runs regardless of the commandData sent
@@ -96,79 +89,17 @@ void procCommQfunc(void *pvParameters) {
   }
 }
 
-// Function used for measuring distance and acting as a basic autonomous mode.   
-void distanceSensorfunc(void *pvParameters) {
+
+
+void otatask(void *pvParameters) {
   for(;;) {		// Run forever unless killed by task handle
-    readingDistance = sensor.getRawDistance();
-    if ((readingDistance <= 20) && (readingDistance >= 0 )) {         // Shutdown motors if less than 20mm.   Need to update with better overall logic-  this prevents backing up when something is in front too close
-      motorA.stopMotor(); 
-      motorB.stopMotor();
-      motorA.motorRev(speedR);
-      motorB.motorGo(speedL);
-      vTaskDelay(600);
-      motorA.stopMotor();
-      motorB.stopMotor();
-    }
-    vTaskDelay(200);              // This seems to work for now.  Too fast might be affecting stability/kernel panic.  Check freq on PWM channel next.
-    motorA.motorGo(speedR);
-    motorB.motorGo(speedL);
+      ArduinoOTA.handle();    
+      vTaskDelay(1);                                    // Required to allow the UDP server to process commands
   }
 }
 
-void setup() {
-  Serial.begin(115200);
-  // OTA Setup
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  ArduinoOTA.setHostname("robot");                // mDNS hostname
-  ArduinoOTA.begin();
-
-  // Servo Setup
-  ESP32PWM::allocateTimer(0);
-	ESP32PWM::allocateTimer(1);
-	ESP32PWM::allocateTimer(2);
-	ESP32PWM::allocateTimer(3);
-	myservo.setPeriodHertz(50);    // standard 50 hz servo
-	myservo.attach(servoPin, 1000, 2000); 
-
-  // FreeRTOS Queue Setup
-  CommQ = xQueueCreate( 20, sizeof( int ) );  // args:  # of items, size in byte per item      
-  if(CommQ == NULL) {
-    Serial.println("Error creating the queue");
-    }
-
-  //// Create tasks for operational logic  
-  // Motor Command Task 
-  xTaskCreatePinnedToCore(
-      procCommQfunc, // Function to implement the task 
-      "procCommQ", // Name of the task 
-      10000,  // Stack size in words 
-      NULL,  // Task input parameter 
-      2,  // Priority of the task                   // Don't run at 0 and loop() run's at 1.
-      &procCommQ,  // Task handle. 
-      1); // Core where the task should run 
-  
-  // To-do:    - Add command to pause procCommQ to allow sequence of actions to be buffered then launched on command.
-  //              - Add command for pause(ms)  to add to queue
-  //              - Add command to return distance reading
-  
-
-
-  // Distance Sensor Reading Task / Autonomous Mode
-  xTaskCreatePinnedToCore(
-      distanceSensorfunc, // Function to implement the task 
-      "distanceSensor", // Name of the task 
-      10000,  // Stack size in words 
-      NULL,  // Task input parameter 
-      4,  // Priority of the task                   // Higher than other tasks right now to allow priority for collision detection.
-      &distanceH,  // Task handle. 
-      1); // Core where the task should run 
-  vTaskSuspend(distanceH);                         // Suspend task right after creation to allow for remote control by default
-  
-
-  // To-Do:  Move UDP Server to Task
-
-  // Setup UDP Server to listen
+void udpserver(void *pvParameters) {
+for(;;) {		// Run forever unless killed by task handle
   if(udp.listen(20001)) {
     // When a packet is recieved
     udp.onPacket([](AsyncUDPPacket packet) {
@@ -188,18 +119,53 @@ void setup() {
       } else
 
       // All other packets, just return the header to the client for diagnostics
-      //packet.printf("Header Recieved: %c", header[0]);
-      packet.println(readingDistance);                      // Send any invalid header and the current distance reading is returned
-      
+      packet.printf("Header Recieved: %c", header[0]);     
     });
   }
+}
+}
+
+void setup() {
+  Serial.begin(115200);
+  // OTA Setup
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  ArduinoOTA.setHostname("wheelie");                // mDNS hostname
+  ArduinoOTA.begin();
+
+  // FreeRTOS Queue Setup
+  CommQ = xQueueCreate( 20, sizeof( int ) );  // args:  # of items, size in byte per item      
+  if(CommQ == NULL) {
+    Serial.println("Error creating the queue");
+    }
+
+ //// Create tasks for operational logic  
+  // Motor Command Task 
+  xTaskCreatePinnedToCore(
+      procCommQfunc, // Function to implement the task 
+      "procCommQ", // Name of the task 
+      10000,  // Stack size in words 
+      NULL,  // Task input parameter 
+      2,  // Priority of the task                   // Don't run at 0 and loop() run's at 1.
+      &procCommQ,  // Task handle. 
+      1); // Core where the task should run 
   
+  // To-do:    - Add command to pause procCommQ to allow sequence of actions to be buffered then launched on command.
+  //              - Add command for pause(ms)  to add to queue
+  //              - Add command to return distance reading
+
+  // Use this to test the size of the stack on a task to adjust during creation
+  // Serial.println( "Task stack high watermark %d",  uxTaskGetStackHighWaterMark( NULL ) );
+
+
+// Tasks that should run all the time
+  xTaskCreatePinnedToCore(otatask, "OTA", 10000, NULL, 2, NULL, 1);    // ArduinoOTA Task
+  xTaskCreatePinnedToCore(udpserver, "UDP", 10000, NULL, 2, NULL, 1);  // UDP Server Task
+
 }
 
 
 
 void loop() {
-ArduinoOTA.handle();    // To-Do:  Move to own task and kill loop from running
-vTaskDelay(1);          //  Removed delay() since we're using tasks and want to let loop() yield
-
+    vTaskDelete(NULL);        //  Kill loop since everything is handled in tasks and this take up ticks
 }
