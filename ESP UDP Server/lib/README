@@ -1,3 +1,0 @@
-MX1508 Motor Driver Library for ESP32
-
-Adapted from https://github.com/Saeterncj/MX1508 to use the LEDC driver for PWM control of the motors.   ESP32 dosn't have an analogWrite() function, but it can multiplex and do PWM on pretty much any pin allowing for flexibility.  
